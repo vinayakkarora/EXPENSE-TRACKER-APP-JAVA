@@ -22,7 +22,7 @@ public class ExpenseTrackerApp extends JFrame {
     private DefaultListModel<String> expenseListModel;
     private static final String JDBC_URL = "jdbc:mysql://localhost:3306/expense";
     private static final String JDBC_USER = "root";
-    private static final String JDBC_PASSWORD = "antanisfamily";
+    private static final String JDBC_PASSWORD = "yourpassword";
     private Connection connection;
 
     public ExpenseTrackerApp() {
