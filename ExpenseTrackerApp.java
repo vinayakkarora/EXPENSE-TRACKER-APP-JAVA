@@ -4,6 +4,11 @@ import org.jfree.chart.JFreeChart;
 import org.jfree.data.general.DefaultPieDataset;
 import javax.swing.*;
 import java.awt.*;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.util.HashMap;
@@ -15,11 +20,15 @@ public class ExpenseTrackerApp extends JFrame {
     private JComboBox<String> categoryComboBox;
     private JTextField dateField;
     private DefaultListModel<String> expenseListModel;
+    private static final String JDBC_URL = "jdbc:mysql://localhost:3306/expense";
+    private static final String JDBC_USER = "root";
+    private static final String JDBC_PASSWORD = "antanisfamily";
+    private Connection connection;
 
     public ExpenseTrackerApp() {
         setTitle("Expense Tracker");
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        setSize(800, 600);
+        setSize(800, 700);
 
        
         getContentPane().setBackground(new Color(173, 216, 230));
@@ -77,16 +86,40 @@ public class ExpenseTrackerApp extends JFrame {
         inputPanel.add(dateField, gbc);
 
         gbc.gridx = 0;
-        gbc.gridy = 4;
         gbc.gridwidth = 2;
-        JButton addButton = new JButton("Add Expense");
-        inputPanel.add(addButton, gbc);
-        addButton.addActionListener(new ActionListener() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                addExpense();
-            }
-        });
+        gbc.gridx = 0;
+gbc.gridy = 5;
+JButton retrieveButton = new JButton("Retrieve Logs");
+inputPanel.add(retrieveButton, gbc);
+retrieveButton.addActionListener(new ActionListener() {
+    @Override
+    public void actionPerformed(ActionEvent e) {
+        retrieveExpensesFromDatabase();
+    }
+});
+
+gbc.gridx = 3;
+gbc.gridy = 6;
+JButton clearLogsButton = new JButton("Clear Logs");
+inputPanel.add(clearLogsButton, gbc);
+clearLogsButton.addActionListener(new ActionListener() {
+    @Override
+    public void actionPerformed(ActionEvent e) {
+        clearLogs();
+    }
+});
+
+gbc.gridx = 0;
+gbc.gridy = 4;
+gbc.gridwidth = 2;
+JButton addButton = new JButton("Add Expense");
+inputPanel.add(addButton, gbc);
+addButton.addActionListener(new ActionListener() {
+    @Override
+    public void actionPerformed(ActionEvent e) {
+        addExpense();
+    }
+});
         contentPanel.add(inputPanel, BorderLayout.NORTH);
 
         JPanel expenseListPanel = new JPanel(new BorderLayout());
@@ -108,7 +141,66 @@ public class ExpenseTrackerApp extends JFrame {
         contentPanel.add(expenseListPanel, BorderLayout.CENTER);
 
         setContentPane(contentPanel);
+
+        try {
+            connection = DriverManager.getConnection(JDBC_URL, JDBC_USER, JDBC_PASSWORD);
+            System.out.println("Connected to the database!");
+        } catch (SQLException e) {
+            e.printStackTrace();
+            System.err.println("Failed to connect to the database.");
+        }
     }
+
+
+    private void clearLogs() {
+        int confirm = JOptionPane.showConfirmDialog(this, "Are you sure you want to clear all logs?", "Confirmation", JOptionPane.YES_NO_OPTION);
+        if (confirm == JOptionPane.YES_OPTION) {
+            // Clear logs from the database
+            try (PreparedStatement statement = connection.prepareStatement("DELETE FROM expenses")) {
+                statement.executeUpdate();
+            } catch (SQLException ex) {
+                ex.printStackTrace();
+            }
+    
+            // Clear logs from the list model
+            expenseListModel.clear();
+        }
+    }
+
+
+    private void addExpenseToDatabase(double amount, String item, String category, String date) {
+        String insertQuery = "INSERT INTO expenses (amount, item, category, date) VALUES (?, ?, ?, ?)";
+        try (PreparedStatement statement = connection.prepareStatement(insertQuery)) {
+            statement.setDouble(1, amount);
+            statement.setString(2, item);
+            statement.setString(3, category);
+            statement.setString(4, date);
+            statement.executeUpdate();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void retrieveExpensesFromDatabase() {
+        expenseListModel.clear();
+        String selectQuery = "SELECT amount, item, category, date FROM expenses";
+        try (PreparedStatement statement = connection.prepareStatement(selectQuery);
+             ResultSet resultSet = statement.executeQuery()) {
+            while (resultSet.next()) {
+                double amount = resultSet.getDouble("amount");
+                String item = resultSet.getString("item");
+                String category = resultSet.getString("category");
+                String date = resultSet.getString("date");
+
+                String expense = amount + " - " + item + " - " + category + " (" + date + ")";
+                expenseListModel.addElement(expense);
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+
 
     private void addExpense() {
         String expense = expenseField.getText();
@@ -117,10 +209,14 @@ public class ExpenseTrackerApp extends JFrame {
         String date = dateField.getText();
 
         if (!expense.isEmpty() && !date.isEmpty()) {
-            String newExpense = expense + " - " + item + " - " + category + " (" + date + ")";
-            expenseListModel.addElement(newExpense);
+            try {
+                double amount = Double.parseDouble(expense);
+                addExpenseToDatabase(amount, item, category, date);
+                retrieveExpensesFromDatabase();
+            } catch (NumberFormatException e) {
+                JOptionPane.showMessageDialog(this, "Invalid amount format.", "Error", JOptionPane.ERROR_MESSAGE);
+            }
 
-            
             expenseField.setText("");
             itemField.setText("");
             dateField.setText("");
@@ -128,6 +224,9 @@ public class ExpenseTrackerApp extends JFrame {
             JOptionPane.showMessageDialog(this, "Expense and Date cannot be empty.", "Warning", JOptionPane.WARNING_MESSAGE);
         }
     }
+
+    
+    
 
     private void showExpensesChart() {
         HashMap<String, Double> categoryTotals = new HashMap<>();
