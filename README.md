@@ -1,2 +1,2 @@
 # EXPENSE-TRACKER-APP-JAVA
-Expense Tracker in Java
+Expense Tracker in Java.
